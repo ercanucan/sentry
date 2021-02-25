@@ -350,7 +350,7 @@ const iconSizes = {
   xxl: '72px',
 };
 
-const commonTheme = {
+export const theme = {
   breakpoints: ['800px', '992px', '1200px', '1440px', '2560px'],
 
   ...colors,
@@ -530,19 +530,19 @@ const darkAliases = {
   progressBar: colors.purple200,
 } as const;
 
-const theme = {
-  ...commonTheme,
+export const lightTheme = {
+  ...theme,
   ...aliases,
   button: generateButtonTheme(aliases),
 } as const;
 
 export const darkTheme = {
-  ...commonTheme,
+  ...theme,
   ...darkAliases,
   button: generateButtonTheme(darkAliases),
 } as const;
 
-export type Theme = typeof theme | typeof darkTheme;
+export type Theme = typeof lightTheme | typeof darkTheme;
 export type Color = keyof typeof colors;
 export type IconSize = keyof typeof iconSizes;
 export type Aliases = typeof aliases;
