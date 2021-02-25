@@ -9,7 +9,7 @@ import {t} from 'app/locale';
 
 type Error = {
   type: string;
-  message: string;
+  message: React.ReactNode;
   data: {
     name?: string;
     message?: string;
@@ -17,7 +17,8 @@ type Error = {
     image_name?: string;
     server_time?: string;
     sdk_time?: string;
-  };
+    url?: string;
+  } & Record<string, any>;
 };
 
 const keyMapping = {
@@ -39,7 +40,7 @@ class EventErrorItem extends React.Component<Props, State> {
     isOpen: false,
   };
 
-  shouldComponentUpdate(_nextProps, nextState) {
+  shouldComponentUpdate(_nextProps: Props, nextState: State) {
     return this.state.isOpen !== nextState.isOpen;
   }
 

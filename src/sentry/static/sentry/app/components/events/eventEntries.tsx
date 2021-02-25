@@ -1,12 +1,14 @@
 import React from 'react';
 import styled from '@emotion/styled';
+import * as Sentry from '@sentry/react';
 import {Location} from 'history';
 
+import {Client} from 'app/api';
 import ErrorBoundary from 'app/components/errorBoundary';
 import EventContexts from 'app/components/events/contexts';
 import EventContextSummary from 'app/components/events/contextSummary/contextSummary';
 import EventDevice from 'app/components/events/device';
-import EventErrors from 'app/components/events/errors';
+import EventErrors, {Error} from 'app/components/events/errors';
 import EventAttachments from 'app/components/events/eventAttachments';
 import EventCause from 'app/components/events/eventCause';
 import EventCauseEmpty from 'app/components/events/eventCauseEmpty';
@@ -23,11 +25,15 @@ import EventUserFeedback from 'app/components/events/userFeedback';
 import {t} from 'app/locale';
 import space from 'app/styles/space';
 import {Group, Organization, Project, SharedViewOrganization} from 'app/types';
-import {Entry, Event} from 'app/types/event';
+import {DebugFile} from 'app/types/debugFiles';
+import {Image} from 'app/types/debugImage';
+import {Entry, EntryType, Event} from 'app/types/event';
 import {isNotSharedOrganization} from 'app/types/utils';
 import {objectIsEmpty} from 'app/utils';
 import {analytics} from 'app/utils/analytics';
+import withApi from 'app/utils/withApi';
 import withOrganization from 'app/utils/withOrganization';
+import {projectProcessingIssuesMessages} from 'app/views/settings/project/projectProcessingIssues';
 
 import EventEntry from './eventEntry';
 
@@ -37,6 +43,8 @@ const defaultProps = {
   showTagSummary: true,
 };
 
+type ProGuardErrors = Array<Error>;
+
 type Props = {
   /**
    * The organization can be the shared view on a public issue view.
@@ -45,25 +53,27 @@ type Props = {
   event: Event;
   project: Project;
   location: Location;
-
+  api: Client;
   group?: Group;
   className?: string;
 } & typeof defaultProps;
 
-class EventEntries extends React.Component<Props> {
+type State = {
+  isLoading: boolean;
+  proGuardErrors: ProGuardErrors;
+};
+
+class EventEntries extends React.Component<Props, State> {
   static defaultProps = defaultProps;
 
+  state: State = {
+    isLoading: true,
+    proGuardErrors: [],
+  };
+
   componentDidMount() {
-    const {event} = this.props;
-
-    if (!event || !event.errors || !(event.errors.length > 0)) {
-      return;
-    }
-    const errors = event.errors;
-    const errorTypes = errors.map(errorEntries => errorEntries.type);
-    const errorMessages = errors.map(errorEntries => errorEntries.message);
-
-    this.recordIssueError(errorTypes, errorMessages);
+    this.checkProGuardError();
+    this.recordIssueError();
   }
 
   shouldComponentUpdate(nextProps: Props) {
@@ -75,8 +85,80 @@ class EventEntries extends React.Component<Props> {
     );
   }
 
-  recordIssueError(errorTypes: any[], errorMessages: string[]) {
+  async fetchDebugFile(query: string): Promise<undefined | Array<DebugFile>> {
+    const {api, organization, project} = this.props;
+    try {
+      const debugFiles = await api.requestPromise(
+        `/projects/${organization.slug}/${project.slug}/files/dsyms/`,
+        {
+          method: 'GET',
+          query: {
+            query,
+            file_formats: organization.features?.includes('android-mappings')
+              ? ['breakpad', 'macho', 'elf', 'pe', 'pdb', 'sourcebundle']
+              : undefined,
+          },
+        }
+      );
+      return debugFiles;
+    } catch (error) {
+      Sentry.captureException(error);
+      // do nothing, the UI will not display extra error details
+      return undefined;
+    }
+  }
+
+  async checkProGuardError() {
+    const {event} = this.props;
+
+    const hasEventErrorsProGuardMissingMapping = event.errors.find(
+      error => error.type === 'proguard_missing_mapping'
+    );
+
+    if (hasEventErrorsProGuardMissingMapping) {
+      this.setState({isLoading: false});
+      return;
+    }
+
+    const proGuardErrors: ProGuardErrors = [];
+
+    const debugImages = event?.entries.find(e => e.type === EntryType.DEBUGMETA)?.data
+      .images as undefined | Array<Image>;
+
+    // When debugImages contains a 'proguard' entry, it must always be only one entry
+    const proGuardImage = debugImages?.find(
+      debugImage => debugImage.type === 'proguard' && !!debugImage.uuid
+    );
+
+    // If an entry is of type 'proguard' and has 'uuid',
+    // it means that the Sentry Gradle plugin has been executed,
+    // otherwise the proguard id wouldn't be in the event.
+    // But maybe it failed to upload the mappings file
+    if (proGuardImage?.uuid) {
+      const debugFile = await this.fetchDebugFile(proGuardImage.uuid);
+
+      if (!debugFile || !debugFile.length) {
+        proGuardErrors.push({
+          data: {mapping_uuid: proGuardImage.uuid},
+          message: projectProcessingIssuesMessages.proguard_missing_mapping,
+          type: 'proguard_missing_mapping',
+        });
+      }
+    }
+
+    this.setState({proGuardErrors, isLoading: false});
+  }
+
+  recordIssueError() {
     const {organization, project, event} = this.props;
+
+    if (!event || !event.errors || !(event.errors.length > 0)) {
+      return;
+    }
+
+    const errors = event.errors;
+    const errorTypes = errors.map(errorEntries => errorEntries.type);
+    const errorMessages = errors.map(errorEntries => errorEntries.message);
 
     const orgId = organization.id;
     const platform = project.platform;
@@ -131,9 +213,9 @@ class EventEntries extends React.Component<Props> {
       showTagSummary,
       location,
     } = this.props;
+    const {proGuardErrors, isLoading} = this.state;
 
-    const features =
-      organization && organization.features ? new Set(organization.features) : new Set();
+    const features = new Set(organization?.features);
     const hasQueryFeature = features.has('discover-query');
 
     if (!event) {
@@ -143,19 +225,19 @@ class EventEntries extends React.Component<Props> {
         </div>
       );
     }
+
     const hasContext = !objectIsEmpty(event.user) || !objectIsEmpty(event.contexts);
-    const hasErrors = !objectIsEmpty(event.errors);
+    const hasErrors = !objectIsEmpty(event.errors) || proGuardErrors.length > 1;
 
     return (
       <div className={className} data-test-id="event-entries">
-        {hasErrors && (
-          <ErrorContainer>
-            <EventErrors
-              event={event}
-              orgSlug={organization.slug}
-              projectSlug={project.slug}
-            />
-          </ErrorContainer>
+        {hasErrors && !isLoading && (
+          <EventErrors
+            event={event}
+            orgSlug={organization.slug}
+            projectSlug={project.slug}
+            proGuardErrors={proGuardErrors}
+          />
         )}
         {!isShare &&
           isNotSharedOrganization(organization) &&
@@ -174,7 +256,7 @@ class EventEntries extends React.Component<Props> {
             report={event.userReport}
             orgId={organization.slug}
             issueId={group.id}
-            includeBorder={!hasErrors}
+            includeBorder={hasErrors}
           />
         )}
         {hasContext && showTagSummary && <EventContextSummary event={event} />}
@@ -260,5 +342,5 @@ const StyledEventUserFeedback = styled(EventUserFeedback)<StyledEventUserFeedbac
 `;
 
 // TODO(ts): any required due to our use of SharedViewOrganization
-export default withOrganization<any>(EventEntries);
+export default withOrganization<any>(withApi(EventEntries));
 export {BorderlessEventEntries};

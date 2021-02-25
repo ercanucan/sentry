@@ -20,10 +20,13 @@ import {BannerContainer, BannerSummary} from './styles';
 
 const MAX_ERRORS = 100;
 
+export type Error = EventErrorItem['props']['error'];
+
 type Props = {
   api: Client;
   orgSlug: Organization['slug'];
   projectSlug: Project['slug'];
+  proGuardErrors: Array<Error>;
   event: Event;
 };
 
@@ -51,6 +54,32 @@ class EventErrors extends React.Component<Props, State> {
   componentDidUpdate(prevProps: Props) {
     if (this.props.event.id !== prevProps.event.id) {
       this.checkSourceCodeErrors();
+    }
+  }
+
+  async fetchReleaseArtifacts(query: string) {
+    const {api, orgSlug, event, projectSlug} = this.props;
+    const {release} = event;
+    const releaseVersion = release?.version;
+
+    if (!releaseVersion || !query) {
+      return;
+    }
+
+    try {
+      const releaseArtifacts = await api.requestPromise(
+        `/projects/${orgSlug}/${projectSlug}/releases/${encodeURIComponent(
+          releaseVersion
+        )}/files/?query=${query}`,
+        {
+          method: 'GET',
+        }
+      );
+
+      this.setState({releaseArtifacts});
+    } catch (error) {
+      Sentry.captureException(error);
+      // do nothing, the UI will not display extra error details
     }
   }
 
@@ -90,46 +119,20 @@ class EventErrors extends React.Component<Props, State> {
     }
   }
 
-  async fetchReleaseArtifacts(query: string) {
-    const {api, orgSlug, event, projectSlug} = this.props;
-    const {release} = event;
-    const releaseVersion = release?.version;
-
-    if (!releaseVersion || !query) {
-      return;
-    }
-
-    try {
-      const releaseArtifacts = await api.requestPromise(
-        `/projects/${orgSlug}/${projectSlug}/releases/${encodeURIComponent(
-          releaseVersion
-        )}/files/?query=${query}`,
-        {
-          method: 'GET',
-        }
-      );
-
-      this.setState({releaseArtifacts});
-    } catch (error) {
-      Sentry.captureException(error);
-      // do nothing, the UI will not display extra error details
-    }
-  }
-
   toggle = () => {
     this.setState(state => ({isOpen: !state.isOpen}));
   };
 
-  uniqueErrors = (errors: any[]) => uniqWith(errors, isEqual);
-
   render() {
-    const {event} = this.props;
+    const {event, proGuardErrors} = this.props;
     const {isOpen, releaseArtifacts} = this.state;
     const {dist} = event;
 
-    // XXX: uniqueErrors is not performant with large datasets
-    const errors =
-      event.errors.length > MAX_ERRORS ? event.errors : this.uniqueErrors(event.errors);
+    // XXX: uniqWith returns unique errors and is not performant with large datasets
+    const eventErrors: Array<Error> =
+      event.errors.length > MAX_ERRORS ? event.errors : uniqWith(event.errors, isEqual);
+
+    const errors = [...eventErrors, ...proGuardErrors];
 
     return (
       <StyledBanner priority="danger">
@@ -159,7 +162,10 @@ class EventErrors extends React.Component<Props, State> {
                 !!releaseArtifacts?.length
               ) {
                 const releaseArtifact = releaseArtifacts.find(releaseArt => {
-                  const pathname = this.getURLPathname(error.data.url);
+                  const pathname = error.data.url
+                    ? this.getURLPathname(error.data.url)
+                    : undefined;
+
                   if (pathname) {
                     return releaseArt.name.includes(pathname);
                   }
