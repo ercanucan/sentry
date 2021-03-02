@@ -547,7 +547,7 @@ export type Color = keyof typeof colors;
 export type IconSize = keyof typeof iconSizes;
 export type Aliases = typeof aliases;
 
-export default theme;
+export default lightTheme;
 
 // This should never be used directly (except in storybook)
 export {aliases};
