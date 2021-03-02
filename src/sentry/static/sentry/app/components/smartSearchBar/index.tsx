@@ -4,6 +4,7 @@ import {ClassNames} from '@emotion/core';
 import styled from '@emotion/styled';
 import * as Sentry from '@sentry/react';
 import createReactClass from 'create-react-class';
+import {withTheme} from 'emotion-theming';
 import debounce from 'lodash/debounce';
 import PropTypes from 'prop-types';
 import Reflux from 'reflux';
@@ -33,7 +34,7 @@ import {LightWeightOrganization, SavedSearch, SavedSearchType, Tag} from 'app/ty
 import {defined} from 'app/utils';
 import {trackAnalyticsEvent} from 'app/utils/analytics';
 import {callIfFunction} from 'app/utils/callIfFunction';
-import theme from 'app/utils/theme';
+import commonTheme, {Theme} from 'app/utils/theme';
 import withApi from 'app/utils/withApi';
 import withOrganization from 'app/utils/withOrganization';
 import CreateSavedSearchButton from 'app/views/issueList/createSavedSearchButton';
@@ -61,7 +62,7 @@ const getInputButtonStyles = (p: {
   isActive?: boolean;
   collapseIntoEllipsisMenu?: number;
 }) => `
-  color: ${p.isActive ? theme.blue300 : theme.gray300};
+  color: ${p.isActive ? commonTheme.blue300 : commonTheme.gray300};
   width: 18px;
 
   &,
@@ -71,20 +72,24 @@ const getInputButtonStyles = (p: {
   }
 
   &:hover {
-    color: ${theme.gray400};
+    color: ${commonTheme.gray400};
   }
 
   ${
     p.collapseIntoEllipsisMenu &&
-    getMediaQuery(theme.breakpoints[p.collapseIntoEllipsisMenu], 'none')
+    getMediaQuery(commonTheme.breakpoints[p.collapseIntoEllipsisMenu], 'none')
   };
 `;
 
-const getDropdownElementStyles = (p: {showBelowMediaQuery: number; last?: boolean}) => `
+const getDropdownElementStyles = (p: {
+  theme: Theme;
+  showBelowMediaQuery: number;
+  last?: boolean;
+}) => `
   padding: 0 ${space(1)} ${p.last ? null : space(0.5)};
   margin-bottom: ${p.last ? null : space(0.5)};
   display: none;
-  color: ${theme.textColor};
+  color: ${p.theme.textColor};
   align-items: center;
   min-width: 190px;
   height: 38px;
@@ -94,12 +99,12 @@ const getDropdownElementStyles = (p: {showBelowMediaQuery: number; last?: boolea
   &,
   &:hover,
   &:focus {
-    border-bottom: ${p.last ? null : `1px solid ${theme.border}`};
+    border-bottom: ${p.last ? null : `1px solid ${p.theme.border}`};
     border-radius: 0;
   }
 
   &:hover {
-    color: ${theme.blue300};
+    color: ${p.theme.blue300};
   }
   & > svg {
     margin-right: ${space(1)};
@@ -107,11 +112,12 @@ const getDropdownElementStyles = (p: {showBelowMediaQuery: number; last?: boolea
 
   ${
     p.showBelowMediaQuery &&
-    getMediaQuery(theme.breakpoints[p.showBelowMediaQuery], 'flex')
+    getMediaQuery(commonTheme.breakpoints[p.showBelowMediaQuery], 'flex')
   }
 `;
 
 type Props = {
+  theme: Theme;
   api: Client;
   organization: LightWeightOrganization;
   dropdownClassName?: string;
@@ -1042,6 +1048,7 @@ class SmartSearchBar extends React.Component<Props, State> {
 
   render() {
     const {
+      theme,
       className,
       dropdownClassName,
       organization,
@@ -1138,7 +1145,7 @@ class SmartSearchBar extends React.Component<Props, State> {
                   tooltipProps={{
                     containerDisplayMode: 'inline-flex',
                     className: css`
-                      ${getMediaQuery(theme.breakpoints[1], 'none')}
+                      ${getMediaQuery(commonTheme.breakpoints[1], 'none')}
                     `,
                   }}
                   onClick={this.onTogglePinnedSearch}
@@ -1164,7 +1171,7 @@ class SmartSearchBar extends React.Component<Props, State> {
                     })}
                   `}
                   tooltipClassName={css`
-                    ${getMediaQuery(theme.breakpoints[2], 'none')}
+                    ${getMediaQuery(commonTheme.breakpoints[2], 'none')}
                   `}
                 />
               )}
@@ -1180,7 +1187,7 @@ class SmartSearchBar extends React.Component<Props, State> {
                   tooltipProps={{
                     containerDisplayMode: 'inline-flex',
                     className: css`
-                      ${getMediaQuery(theme.breakpoints[2], 'none')}
+                      ${getMediaQuery(commonTheme.breakpoints[2], 'none')}
                     `,
                   }}
                   collapseIntoEllipsisMenu={2}
@@ -1211,6 +1218,7 @@ class SmartSearchBar extends React.Component<Props, State> {
             >
               {hasPinnedSearch && (
                 <DropdownElement
+                  theme={theme}
                   showBelowMediaQuery={1}
                   data-test-id="pin-icon"
                   onClick={this.onTogglePinnedSearch}
@@ -1228,19 +1236,25 @@ class SmartSearchBar extends React.Component<Props, State> {
                       organization={organization}
                       buttonClassName={css`
                         ${getDropdownElementStyles({
+                          theme,
                           showBelowMediaQuery: 2,
                           last: false,
                         })}
                       `}
                       tooltipClassName={css`
-                        ${getMediaQuery(theme.breakpoints[2], 'none')}
+                        ${getMediaQuery(commonTheme.breakpoints[2], 'none')}
                       `}
                     />
                   )}
                 </ClassNames>
               )}
               {hasSearchBuilder && (
-                <DropdownElement showBelowMediaQuery={2} last onClick={onSidebarToggle}>
+                <DropdownElement
+                  theme={theme}
+                  showBelowMediaQuery={2}
+                  last
+                  onClick={onSidebarToggle}
+                >
                   <IconSliders size="xs" />
                   {t('Toggle sidebar')}
                 </DropdownElement>
@@ -1274,7 +1288,7 @@ const SmartSearchBarContainer = createReactClass<Props>({
   },
 });
 
-export default withApi(withOrganization(SmartSearchBarContainer));
+export default withApi(withOrganization(withTheme(SmartSearchBarContainer)));
 export {SmartSearchBar};
 
 const Container = styled('div')<{isOpen: boolean}>`
@@ -1336,7 +1350,7 @@ const InputButton = styled(Button)`
 const StyledDropdownLink = styled(DropdownLink)`
   display: none;
 
-  @media (max-width: ${p => p.theme.breakpoints[2]}) {
+  @media (max-width: ${commonTheme.breakpoints[2]}) {
     display: flex;
   }
 `;
