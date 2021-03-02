@@ -233,7 +233,7 @@ class Chart extends React.Component<ChartProps, State> {
   }
 }
 
-type Props = {
+export type EventsChartProps = {
   theme: Theme;
   api: Client;
   router: InjectedRouter;
@@ -336,7 +336,7 @@ type ChartDataProps = {
   releaseSeries?: Series[];
 };
 
-class EventsChart extends React.Component<Props> {
+class EventsChart extends React.Component<EventsChartProps> {
   render() {
     const {
       theme,

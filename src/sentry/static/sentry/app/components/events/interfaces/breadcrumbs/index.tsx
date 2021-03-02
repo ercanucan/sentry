@@ -399,7 +399,7 @@ const StyledEventDataSection = styled(EventDataSection)`
 `;
 
 const StyledEmptyMessage = styled(EmptyMessage)`
-  ${aroundContentStyle};
+  ${p => aroundContentStyle(p.theme)};
 `;
 
 const Search = styled('div')`

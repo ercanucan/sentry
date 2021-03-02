@@ -157,7 +157,7 @@ export default ListContainer;
 
 const Wrapper = styled('div')`
   overflow: hidden;
-  ${aroundContentStyle}
+  ${p => aroundContentStyle(p.theme)}
 `;
 
 // it makes the list have a dynamic height; otherwise, in the case of filtered options, a list will be displayed with an empty space
