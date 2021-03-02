@@ -19,8 +19,8 @@ import {getUtcDateString} from 'app/utils/dates';
 import {axisDuration} from 'app/utils/discover/charts';
 import {getExactDuration} from 'app/utils/formatters';
 import {decodeScalar} from 'app/utils/queryString';
-import {displayCrashFreePercent} from 'app/views/releases/utils';
 import {Theme} from 'app/utils/theme';
+import {displayCrashFreePercent} from 'app/views/releases/utils';
 
 import {
   getSessionTermDescription,
