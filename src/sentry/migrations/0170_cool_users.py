@@ -24,19 +24,18 @@ class Migration(migrations.Migration):
     # transaction.
     atomic = True
 
-
     dependencies = [
-        ('sentry', '0169_delete_organization_integration_from_projectcodeowners'),
+        ("sentry", "0169_delete_organization_integration_from_projectcodeowners"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='user',
-            name='last_active',
+            model_name="user",
+            name="last_active",
         ),
         migrations.AddField(
-            model_name='user',
-            name='is_cool',
+            model_name="user",
+            name="is_cool",
             field=models.BooleanField(default=True),
         ),
     ]
