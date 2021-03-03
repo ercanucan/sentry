@@ -22,9 +22,10 @@ import RRWebIntegration from 'app/components/events/rrwebIntegration';
 import EventSdkUpdates from 'app/components/events/sdkUpdates';
 import {DataSection} from 'app/components/events/styles';
 import EventUserFeedback from 'app/components/events/userFeedback';
-import {t} from 'app/locale';
+import ExternalLink from 'app/components/links/externalLink';
+import {t, tct} from 'app/locale';
 import space from 'app/styles/space';
-import {Group, Organization, Project, SharedViewOrganization} from 'app/types';
+import {Frame, Group, Organization, Project, SharedViewOrganization} from 'app/types';
 import {DebugFile} from 'app/types/debugFiles';
 import {Image} from 'app/types/debugImage';
 import {Entry, EntryType, Event} from 'app/types/event';
@@ -35,7 +36,11 @@ import withApi from 'app/utils/withApi';
 import withOrganization from 'app/utils/withOrganization';
 import {projectProcessingIssuesMessages} from 'app/views/settings/project/projectProcessingIssues';
 
+import findBestThread from './interfaces/threads/threadSelector/findBestThread';
+import getThreadException from './interfaces/threads/threadSelector/getThreadException';
 import EventEntry from './eventEntry';
+
+const MATCH_MINIFIED_DATA_REGEX = /^(\w|\w{2}\.\w{1,2}|\w{3}((\.\w)|(\.\w{2}){2}))(\.|$)/g;
 
 const defaultProps = {
   isShare: false,
@@ -108,10 +113,26 @@ class EventEntries extends React.Component<Props, State> {
     }
   }
 
+  isDataMinified(str: string | null) {
+    if (!str) {
+      return false;
+    }
+
+    return !![...str.matchAll(MATCH_MINIFIED_DATA_REGEX)].length;
+  }
+
+  hasFrameMinifiedData(frame: Frame) {
+    return (
+      this.isDataMinified(frame.function) ||
+      this.isDataMinified(frame.package) ||
+      this.isDataMinified(frame.filename)
+    );
+  }
+
   async checkProGuardError() {
     const {event} = this.props;
 
-    const hasEventErrorsProGuardMissingMapping = event.errors.find(
+    const hasEventErrorsProGuardMissingMapping = event?.errors?.find(
       error => error.type === 'proguard_missing_mapping'
     );
 
@@ -139,11 +160,37 @@ class EventEntries extends React.Component<Props, State> {
 
       if (!debugFile || !debugFile.length) {
         proGuardErrors.push({
-          data: {mapping_uuid: proGuardImage.uuid},
-          message: projectProcessingIssuesMessages.proguard_missing_mapping,
           type: 'proguard_missing_mapping',
+          message: projectProcessingIssuesMessages.proguard_missing_mapping,
+          data: {mapping_uuid: proGuardImage.uuid},
         });
       }
+
+      this.setState({proGuardErrors, isLoading: false});
+      return;
+    }
+
+    const threads =
+      event?.entries.find(e => e.type === EntryType.THREADS)?.data?.values ?? [];
+
+    const bestThread = findBestThread(threads);
+    const exception = getThreadException(event, bestThread);
+
+    const hasThreadMinifiedData = exception
+      ? exception?.values.find(exc => exc.frames?.find(this.hasFrameMinifiedData))
+      : bestThread?.stacktrace?.frames?.find(this.hasFrameMinifiedData);
+
+    if (hasThreadMinifiedData) {
+      proGuardErrors.push({
+        type: 'proguard_incorrectly_configured_plugin',
+        message: tct('It seems that the [plugin] was not correctly configured.', {
+          plugin: (
+            <ExternalLink href="https://docs.sentry.io/platforms/android/proguard/#gradle">
+              Sentry Gradle Plugin
+            </ExternalLink>
+          ),
+        }),
+      });
     }
 
     this.setState({proGuardErrors, isLoading: false});

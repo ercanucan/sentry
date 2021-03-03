@@ -156,15 +156,14 @@ class EventErrors extends React.Component<Props, State> {
         {isOpen && (
           <ErrorList data-test-id="event-error-details">
             {errors.map((error, errorIdx) => {
+              const data = error.data ?? {};
               if (
                 error.type === 'js_no_source' &&
-                error.data.url &&
+                data.url &&
                 !!releaseArtifacts?.length
               ) {
                 const releaseArtifact = releaseArtifacts.find(releaseArt => {
-                  const pathname = error.data.url
-                    ? this.getURLPathname(error.data.url)
-                    : undefined;
+                  const pathname = data.url ? this.getURLPathname(data.url) : undefined;
 
                   if (pathname) {
                     return releaseArt.name.includes(pathname);
@@ -176,8 +175,8 @@ class EventErrors extends React.Component<Props, State> {
                   error.message = t(
                     'Source code was not found because the distribution did not match'
                   );
-                  error.data['expected-distribution'] = dist;
-                  error.data['current-distribution'] = t('none');
+                  data['expected-distribution'] = dist;
+                  data['current-distribution'] = t('none');
                 }
               }
               return <EventErrorItem key={errorIdx} error={error} />;
